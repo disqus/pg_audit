@@ -42,28 +42,28 @@ AS $$
 BEGIN
 IF (TG_OP = 'DELETE') THEN
     INSERT INTO $q$ || "schema" || '.' || "table" || E'(\n        ' ||
-        string_agg(quote_ident("column_name" || '_old ') , E',\n        ') || E',\n        ' ||
-        string_agg(quote_ident("column_name" || '_new ') , E',\n        ') || $q$,
+        string_agg(quote_ident("column_name" || '_old') , E',\n        ') || E',\n        ' ||
+        string_agg(quote_ident("column_name" || '_new') , E',\n        ') || $q$,
         "current_user",
         "session_user",
         operation
     )
-    VALUES(OLD.*, (NULL::"schema" || '.' || "table").*, current_user, session_user, TG_OP);
+    VALUES(OLD.*, (NULL::$q$ || "schema" || '.' || "table" || $q$).*, current_user, session_user, TG_OP);
     RETURN OLD;
 ELSIF (TG_OP = 'INSERT') THEN
     INSERT INTO $q$ || "schema" || '.' || "table" || E'(\n        ' ||
-        string_agg(quote_ident("column_name" || '_old ') , E',\n        ') || E',\n        ' ||
-        string_agg(quote_ident("column_name" || '_new ') , E',\n        ') || $q$,
+        string_agg(quote_ident("column_name" || '_old') , E',\n        ') || E',\n        ' ||
+        string_agg(quote_ident("column_name" || '_new') , E',\n        ') || $q$,
         "current_user",
         "session_user",
         operation
     )
-    VALUES ((NULL::"schema" || '.' || "table").*, NEW.*, current_user, session_user, TG_OP);
+    VALUES ((NULL::$q$ || "schema" || '.' || "table" || $q$).*, NEW.*, current_user, session_user, TG_OP);
     RETURN NEW;
 ELSIF (TG_OP = 'UPDATE') THEN
     INSERT INTO $q$ || "schema" || '.' || "table" || E'(\n        ' ||
-        string_agg(quote_ident("column_name" || '_old ') , E',\n        ') || E',\n        ' ||
-        string_agg(quote_ident("column_name" || '_new ') , E',\n        ') || $q$,
+        string_agg(quote_ident("column_name" || '_old') , E',\n        ') || E',\n        ' ||
+        string_agg(quote_ident("column_name" || '_new') , E',\n        ') || $q$,
         "current_user",
         "session_user",
         operation
