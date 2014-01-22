@@ -25,9 +25,10 @@ WITH t AS (
     ORDER BY c.relname, a.attnum
 )
 SELECT 'CREATE TABLE ' || "schema" || '.' || "table" || E' (\n    ' ||
-string_agg(quote_ident("column_name" || '_old') || ' ' || column_type, E',\n    ') ||
-E',\n    ' ||
-string_agg(quote_ident("column_name" || '_new') || ' ' || column_type, E',\n    ') ||
+string_agg(
+    quote_ident("column_name" || '_old') || ' ' || column_type || E',\n    ' ||
+    quote_ident("column_name" || '_new') || ' ' || column_type,   E',\n    '
+) ||
 $q$,
     stamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT current_timestamp,
     "current_user" TEXT NOT NULL,
