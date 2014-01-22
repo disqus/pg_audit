@@ -1,7 +1,8 @@
 WITH t AS (
     SELECT
-        quote_ident(n.nspname) AS "schema" || '.' || quote_ident(c.relname) || '_audit' AS "audit",
-        quote_ident(a.attname) AS "column_name",
+        quote_ident(n.nspname) AS "schema",
+        c.relname || '_audit' AS "table",
+        a.attname AS "column_name",
         pg_catalog.format_type(a.atttypid, a.atttypmod) AS "column_type"
     FROM
         pg_catalog.pg_attribute a
@@ -16,51 +17,61 @@ WITH t AS (
         ON (
             c.relnamespace = n.oid AND
             n.nspname NOT IN ('pg_catalog','information_schema') AND
-            n.nspname !~ '^_'
+            n.nspname !~ '(^(pg|)_|_audit$)'
         )
     WHERE
         a.attnum > 0 AND
         NOT a.attisdropped
     ORDER BY c.relname, a.attnum
 )
-SELECT 'CREATE TABLE ' || "audit" || E'(\n    ' ||
-string_agg("column_name" || '_old ' || column_type, E',\n    ') ||
+SELECT 'CREATE TABLE ' || "schema" || '.' || "table" || E' (\n    ' ||
+string_agg(quote_ident("column_name" || '_old') || ' ' || column_type, E',\n    ') ||
 E',\n    ' ||
-string_agg("column_name" || '_new ' || column_type, E',\n    ') ||
+string_agg(quote_ident("column_name" || '_new') || ' ' || column_type, E',\n    ') ||
 $q$,
-    stamp timestamp with time zone default now(),
+    stamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     operation text not null
 );
 
-CREATE OR REPLACE FUNCTION $q$ || "audit" || $q$ RETURNS TRIGGER AS
-$$BEGIN
+CREATE OR REPLACE FUNCTION $q$ || "schema" || '.' || "table" || $q$()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
 IF (TG_OP = 'DELETE') THEN
-    INSERT INTO $q$ || "audit" || E'(\n        ' ||
-    string_agg(quote_ident("column_name") || '_old ' || column_type, E',\n        ') || $q$,
+    INSERT INTO $q$ || "schema" || '.' || "table" || E'(\n        ' ||
+    string_agg(quote_ident("column_name" || '_old ') || E',\n        ') || E',\n        ' ||
+    string_agg(quote_ident("column_name" || '_new ') || E',\n        ') || $q$,
         operation
     )
-    VALUES(OLD.*, TG_OP);
+    VALUES(OLD.*, (NULL::"schema" || '.' || "table").*, TG_OP);
+    RETURN OLD;
 ELSIF (TG_OP = 'INSERT') THEN
-    INSERT INTO $q$ || "audit" || E'(\n        ' ||
-    string_agg(quote_ident("column_name") || '_new ' || column_type, E',\n        ') || $q$,
+    INSERT INTO $q$ || "schema" || '.' || "table" || E'(\n        ' ||
+    string_agg(quote_ident("column_name" || '_old ') || E',\n        ') || E',\n        ' ||
+    string_agg(quote_ident("column_name" || '_new ') || E',\n        ') || $q$,
         operation
     )
-    VALUES (NEW.*, TG_OP);
+    VALUES ((NULL::"schema" || '.' || "table").*, NEW.*, TG_OP);
+    RETURN NEW;
 ELSIF (TG_OP = 'UPDATE') THEN
-    INSERT INTO $q$ || "audit" || E'(\n        ' ||
-    string_agg(quote_ident("column_name") || '_old ' || column_type, E',\n        ') || E',\n        ' ||
-    string_agg(quote_ident("column_name") || '_new ' || column_type, E',\n        ') || $q$,
+    INSERT INTO $q$ || "schema" || '.' || "table" || E'(\n        ' ||
+    string_agg(quote_ident("column_name" || '_old ') || E',\n        ') || E',\n        ' ||
+    string_agg(quote_ident("column_name" || '_new ') || E',\n        ') || $q$,
         operation
     )
-    VALUES (NEW.*, TG_OP);
+    VALUES (OLD.*, NEW.*, TG_OP);
+    RETURN NEW;
 END IF;
-RETURN NULL;
 END;
 $$;
 
-CREATE TRIGGER $q$ || "audit" || $q$
-AFTER INSERT OR UPDATE OR DELETE ON $q$ || regexp_replace("audit", '_audit$', '') || $q$
-    FOR EACH ROW EXECUTE PROCEDURE $q$ || "audit" || $q$();
+CREATE TRIGGER $q$ || quote_ident("schema" || '_' || "table") || $q$
+AFTER INSERT OR UPDATE OR DELETE ON $q$ || regexp_replace("schema" || '.' || "table", '_audit$', '') || $q$
+    FOR EACH ROW EXECUTE PROCEDURE $q$ || "schema" || '.' || "table" || $q$();
 $q$ AS "triggers, baby"
 FROM t
-GROUP BY "audit";
+group BY "schema", "table";
+
+/* XXX Need to be able to handle adding columns.  Prolly a catalog
+ * lookup.  Does 9.3 have DDL triggers we can use? */
