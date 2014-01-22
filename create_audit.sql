@@ -42,8 +42,8 @@ AS $$
 BEGIN
 IF (TG_OP = 'DELETE') THEN
     INSERT INTO $q$ || "schema" || '.' || "table" || E'(\n        ' ||
-    string_agg(quote_ident("column_name" || '_old ') || E',\n        ') || E',\n        ' ||
-    string_agg(quote_ident("column_name" || '_new ') || E',\n        ') || $q$,
+        string_agg(quote_ident("column_name" || '_old ') , E',\n        ') || E',\n        ' ||
+        string_agg(quote_ident("column_name" || '_new ') , E',\n        ') || $q$,
         "current_user",
         "session_user",
         operation
@@ -52,8 +52,8 @@ IF (TG_OP = 'DELETE') THEN
     RETURN OLD;
 ELSIF (TG_OP = 'INSERT') THEN
     INSERT INTO $q$ || "schema" || '.' || "table" || E'(\n        ' ||
-    string_agg(quote_ident("column_name" || '_old ') || E',\n        ') || E',\n        ' ||
-    string_agg(quote_ident("column_name" || '_new ') || E',\n        ') || $q$,
+        string_agg(quote_ident("column_name" || '_old ') , E',\n        ') || E',\n        ' ||
+        string_agg(quote_ident("column_name" || '_new ') , E',\n        ') || $q$,
         "current_user",
         "session_user",
         operation
@@ -62,8 +62,8 @@ ELSIF (TG_OP = 'INSERT') THEN
     RETURN NEW;
 ELSIF (TG_OP = 'UPDATE') THEN
     INSERT INTO $q$ || "schema" || '.' || "table" || E'(\n        ' ||
-    string_agg(quote_ident("column_name" || '_old ') || E',\n        ') || E',\n        ' ||
-    string_agg(quote_ident("column_name" || '_new ') || E',\n        ') || $q$,
+        string_agg(quote_ident("column_name" || '_old ') , E',\n        ') || E',\n        ' ||
+        string_agg(quote_ident("column_name" || '_new ') , E',\n        ') || $q$,
         "current_user",
         "session_user",
         operation
