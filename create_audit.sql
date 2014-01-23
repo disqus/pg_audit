@@ -75,12 +75,62 @@ END IF;
 END;
 $$;
 
+/* Triggers for the tables. */
 CREATE TRIGGER $q$ || quote_ident("schema" || '_' || "table") || $q$
 AFTER INSERT OR UPDATE OR DELETE ON $q$ || regexp_replace("schema" || '.' || "table", '_audit$', '') || $q$
     FOR EACH ROW EXECUTE PROCEDURE $q$ || "schema" || '.' || "table" || $q$();
 $q$ AS "triggers, baby"
 FROM t
 group BY "schema", "table";
+
+/* Indexes for each unique key */
+WITH t AS (
+    SELECT
+        n.nspname::text,
+        c.relname::text,
+        array_agg(a.attname::text ORDER BY k.ord) AS "cols"
+    FROM
+        pg_catalog.pg_class c
+    JOIN
+        pg_catalog.pg_namespace n
+        ON (
+            c.relkind = 'r' AND
+            c.relnamespace = n.oid AND
+            n.nspname NOT IN ('pg_catalog','information_schema') AND
+            n.nspname !~ '(^(pg|)_|_audit$)'
+        )
+    JOIN
+        pg_catalog.pg_constraint co
+        ON (
+            c.oid = co.conrelid AND
+            co.contype IN ('p','u')
+        )
+    CROSS JOIN LATERAL
+        UNNEST(co.conkey) WITH ORDINALITY AS k(col, ord) /* XXX Need to find some pre-9.4 hack for this. */
+    JOIN
+        pg_catalog.pg_attribute a
+        ON (
+            k.col = a.attnum AND
+            c.oid = a.attrelid
+        )
+    GROUP BY n.nspname, c.relname, co.conname
+)
+SELECT
+    'CREATE INDEX ' ||
+    quote_ident(
+        array_to_string(nspname || (relname || cols || v), '_')
+    ) ||
+    ' ON ' ||
+    quote_ident( nspname ) || '.' ||
+    quote_ident( relname || '_' || v )||
+    ' (' ||
+    (SELECT string_agg(u || '_' || v, ', ') FROM UNNEST(cols) AS u(u)) ||
+    ');'
+FROM
+    t
+CROSS JOIN
+    (VALUES('old'),('new')) AS o_n(v)
+;
 
 /* XXX Need to be able to handle adding columns.  Prolly a catalog
  * lookup.  Does 9.3 have DDL triggers we can use? */
