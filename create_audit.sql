@@ -16,71 +16,80 @@ WITH t AS (
         pg_catalog.pg_namespace n
         ON (
             c.relnamespace = n.oid AND
-            n.nspname NOT IN ('pg_catalog','information_schema') AND
-            n.nspname !~ '(^(pg|)_|_audit$)'
+            n.nspname NOT IN ('pg_catalog','information_schema') AND /* Leave out the stuff in the catalog */
+            n.nspname !~ '(^(pg|)_|_audit$)'                         /* Also omit anything that looks like PostgreSQL, Slony or Audit owns it. */
         )
     WHERE
         a.attnum > 0 AND
         NOT a.attisdropped
     ORDER BY c.relname, a.attnum
 )
-SELECT 'CREATE TABLE ' || "schema" || '.' || "table" || E' (\n    ' ||
-string_agg(
-    quote_ident("column_name" || '_old') || ' ' || column_type || E',\n    ' ||
-    quote_ident("column_name" || '_new') || ' ' || column_type,   E',\n    '
-) ||
-$q$,
+SELECT
+    format(
+        $q$CREATE TABLE %I.%I (
+    %s,
     stamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT current_timestamp,
     "current_user" TEXT NOT NULL,
     "session_user" TEXT NOT NULL,
     operation TEXT NOT NULL
 );
 
-CREATE OR REPLACE FUNCTION $q$ || "schema" || '.' || "table" || $q$()
+CREATE OR REPLACE FUNCTION %I.%I()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
+DECLARE
+    v_old %I.%I%%ROWTYPE;
+    v_new %I.%I%%ROWTYPE;
+    v_ret %I.%I%%ROWTYPE;
 BEGIN
-IF (TG_OP = 'DELETE') THEN
-    INSERT INTO $q$ || "schema" || '.' || "table" || E'(\n        ' ||
-        string_agg(quote_ident("column_name" || '_old') , E',\n        ') || E',\n        ' ||
-        string_agg(quote_ident("column_name" || '_new') , E',\n        ') || $q$,
+    IF (TG_OP = 'DELETE') THEN
+        v_old := OLD;
+        v_new := NULL;
+        v_ret := OLD;
+    ELSIF (TG_OP = 'INSERT') THEN
+        v_old := NULL;
+        v_new := NEW;
+        v_ret := NEW;
+    ELSIF (TG_OP = 'UPDATE') THEN
+        v_old := OLD;
+        v_new := NEW;
+        v_ret := NEW;
+    END IF;
+    INSERT INTO %I.%I (
+        %s,
+        %s,
         "current_user",
         "session_user",
         operation
     )
-    VALUES(OLD.*, (NULL::$q$ || "schema" || '.' || "table" || $q$).*, current_user, session_user, TG_OP);
-    RETURN OLD;
-ELSIF (TG_OP = 'INSERT') THEN
-    INSERT INTO $q$ || "schema" || '.' || "table" || E'(\n        ' ||
-        string_agg(quote_ident("column_name" || '_old') , E',\n        ') || E',\n        ' ||
-        string_agg(quote_ident("column_name" || '_new') , E',\n        ') || $q$,
-        "current_user",
-        "session_user",
-        operation
-    )
-    VALUES ((NULL::$q$ || "schema" || '.' || "table" || $q$).*, NEW.*, current_user, session_user, TG_OP);
-    RETURN NEW;
-ELSIF (TG_OP = 'UPDATE') THEN
-    INSERT INTO $q$ || "schema" || '.' || "table" || E'(\n        ' ||
-        string_agg(quote_ident("column_name" || '_old') , E',\n        ') || E',\n        ' ||
-        string_agg(quote_ident("column_name" || '_new') , E',\n        ') || $q$,
-        "current_user",
-        "session_user",
-        operation
-    )
-    VALUES (OLD.*, NEW.*, current_user, session_user, TG_OP);
-    RETURN NEW;
-END IF;
+    VALUES((v_old).*, (v_new).*, current_user, session_user, TG_OP);
+    RETURN v_ret;
 END;
 $$;
 
-CREATE TRIGGER $q$ || quote_ident("schema" || '_' || "table") || $q$
-AFTER INSERT OR UPDATE OR DELETE ON $q$ || regexp_replace("schema" || '.' || "table", '_audit$', '') || $q$
-    FOR EACH ROW EXECUTE PROCEDURE $q$ || "schema" || '.' || "table" || $q$();
-$q$ AS "triggers, baby"
-FROM t
-group BY "schema", "table";
-
+CREATE TRIGGER %I
+AFTER INSERT OR UPDATE OR DELETE ON %I.%I
+    FOR EACH ROW EXECUTE PROCEDURE %I.%I();$q$,
+        "schema", "table",
+        string_agg(
+            quote_ident("column_name" || '_old') || ' ' || column_type || E',\n    ' ||
+            quote_ident("column_name" || '_new') || ' ' || column_type,   E',\n    '
+        ),
+        "schema", "table",
+        "schema", regexp_replace("table", '_audit$', ''),
+        "schema", regexp_replace("table", '_audit$', ''),
+        "schema", regexp_replace("table", '_audit$', ''),
+        "schema", "table",
+        string_agg(quote_ident("column_name" || '_old'), E',\n        '),
+        string_agg(quote_ident("column_name" || '_new'), E',\n        '),
+        quote_ident("schema" || '_' || "table"),
+        "schema", regexp_replace("table", '_audit$', ''),
+        "schema", "table"
+    ) AS "table and trigger"
+FROM
+    t
+GROUP BY "schema", "table"
+;
 /* XXX Need to be able to handle adding columns.  Prolly a catalog
  * lookup.  Does 9.3 have DDL triggers we can use? */
