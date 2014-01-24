@@ -1,4 +1,4 @@
-WITH t AS (
+WITH t0 AS (
     SELECT
         quote_ident(n.nspname) AS "schema",
         c.relname || '_audit' AS "table",
@@ -88,12 +88,11 @@ AFTER INSERT OR UPDATE OR DELETE ON %I.%I
         "schema", "table"
     ) AS "table and trigger"
 FROM
-    t
+    t0
 GROUP BY "schema", "table"
-;
-
+UNION ALL
 /* Indexes for each unique key */
-WITH t AS (
+WITH t1 AS (
     SELECT
         n.nspname::text,
         c.relname::text,
@@ -103,7 +102,7 @@ WITH t AS (
     JOIN
         pg_catalog.pg_namespace n
         ON (
-            c.relname !~ '_audit$'
+            c.relname !~ '_audit$' AND
             c.relkind = 'r' AND
             c.relnamespace = n.oid AND
             n.nspname NOT IN ('pg_catalog','information_schema') AND
@@ -128,11 +127,13 @@ WITH t AS (
 SELECT
     format(
         'CREATE INDEX %I ON %I.%I (%s);',
-        array_to_string(nspname || (relname || cols || v), '_'), nspname, relname || '_' || v,
+        array_to_string(nspname || (relname || cols || v), '_'),
+        nspname,
+        relname || '_audit',
         (SELECT string_agg(u || '_' || v, ', ') FROM UNNEST(cols) AS u(u))
     )
 FROM
-    t
+    t1
 CROSS JOIN
     (VALUES('old'),('new')) AS o_n(v)
 ;
