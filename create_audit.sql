@@ -116,16 +116,11 @@ WITH t AS (
     GROUP BY n.nspname, c.relname, co.conname
 )
 SELECT
-    'CREATE INDEX ' ||
-    quote_ident(
-        array_to_string(nspname || (relname || cols || v), '_')
-    ) ||
-    ' ON ' ||
-    quote_ident( nspname ) || '.' ||
-    quote_ident( relname || '_' || v )||
-    ' (' ||
-    (SELECT string_agg(u || '_' || v, ', ') FROM UNNEST(cols) AS u(u)) ||
-    ');'
+    format(
+        'CREATE INDEX %I ON %I.%I (%s);',
+        array_to_string(nspname || (relname || cols || v), '_'), nspname, relname || '_' || v,
+        (SELECT string_agg(u || '_' || v, ', ') FROM UNNEST(cols) AS u(u))
+    )
 FROM
     t
 CROSS JOIN
