@@ -29,8 +29,8 @@ SELECT
         $q$CREATE TABLE %I.%I (
     %s,
     stamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT current_timestamp,
-    "current_user" TEXT NOT NULL,
-    "session_user" TEXT NOT NULL,
+    "current_user" TEXT NOT NULL DEFAULT current_user,
+    "session_user" TEXT NOT NULL DEFAULT session_user,
     operation TEXT NOT NULL
 );
 
@@ -59,11 +59,9 @@ BEGIN
     INSERT INTO %I.%I (
         %s,
         %s,
-        "current_user",
-        "session_user",
         operation
     )
-    VALUES((v_old).*, (v_new).*, current_user, session_user, TG_OP);
+    VALUES((v_old).*, (v_new).*, TG_OP);
     RETURN v_ret;
 END;
 $$;
@@ -92,51 +90,56 @@ FROM
 GROUP BY "schema", "table"
 UNION ALL
 /* Indexes for each unique key */
-WITH t1 AS (
-    SELECT
-        n.nspname::text,
-        c.relname::text,
-        array_agg(a.attname::text ORDER BY k.ord) AS "cols"
-    FROM
-        pg_catalog.pg_class c
-    JOIN
-        pg_catalog.pg_namespace n
-        ON (
-            c.relname !~ '_audit$' AND
-            c.relkind = 'r' AND
-            c.relnamespace = n.oid AND
-            n.nspname NOT IN ('pg_catalog','information_schema') AND
-            n.nspname !~ '(^(pg|)_|_audit$)'
-        )
-    JOIN
-        pg_catalog.pg_constraint co
-        ON (
-            c.oid = co.conrelid AND
-            co.contype IN ('p','u')
-        )
-    CROSS JOIN LATERAL
-        UNNEST(co.conkey) WITH ORDINALITY AS k(col, ord) /* XXX Need to find some pre-9.4 hack for this. */
-    JOIN
-        pg_catalog.pg_attribute a
-        ON (
-            k.col = a.attnum AND
-            c.oid = a.attrelid
-        )
-    GROUP BY n.nspname, c.relname, co.conname
-)
-SELECT
-    format(
-        'CREATE INDEX %I ON %I.%I (%s);',
-        array_to_string(nspname || (relname || cols || v), '_'),
-        nspname,
-        relname || '_audit',
-        (SELECT string_agg(u || '_' || v, ', ') FROM UNNEST(cols) AS u(u))
+(
+    WITH t1 AS (
+        SELECT
+            n.nspname::text,
+            c.relname::text,
+            array_agg(a.attname::text ORDER BY k.ord) AS "cols"
+        FROM
+            pg_catalog.pg_class c
+        JOIN
+            pg_catalog.pg_namespace n
+            ON (
+                c.relname !~ '_audit$' AND
+                c.relkind = 'r' AND
+                c.relnamespace = n.oid AND
+                n.nspname NOT IN ('pg_catalog','information_schema') AND
+                n.nspname !~ '(^(pg|)_|_audit$)'
+            )
+        JOIN
+            pg_catalog.pg_constraint co
+            ON (
+                c.oid = co.conrelid AND
+                co.contype IN ('p','u')
+            )
+        CROSS JOIN LATERAL
+            /*
+             * XXX In 9.4+, replace the hack below with
+             * UNNEST(co.conkey) WITH ORDINALITY AS k(col, ord)
+             */
+            (SELECT col, row_number() OVER () AS ord FROM UNNEST(co.conkey) AS u(col)) AS k /* XXX Need to find some pre-9.4 hack for this. */
+        JOIN
+            pg_catalog.pg_attribute a
+            ON (
+                k.col = a.attnum AND
+                c.oid = a.attrelid
+            )
+        GROUP BY n.nspname, c.relname, co.conname
     )
-FROM
-    t1
-CROSS JOIN
-    (VALUES('old'),('new')) AS o_n(v)
-;
+    SELECT
+        format(
+            'CREATE INDEX %I ON %I.%I (%s);',
+            array_to_string(nspname || (relname || cols || v), '_'),
+            nspname,
+            relname || '_audit',
+            (SELECT string_agg(u || '_' || v, ', ') FROM UNNEST(cols) AS u(u))
+        )
+    FROM
+        t1
+    CROSS JOIN
+        (VALUES('old'),('new')) AS o_n(v)
+);
 
 /* XXX Need to be able to handle adding columns.  Prolly a catalog
  * lookup.  Does 9.3 have DDL triggers we can use? */
