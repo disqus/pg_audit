@@ -1,0 +1,58 @@
+BEGIN;
+CREATE EXTENSION pg_audit;
+CREATE TABLE foo(id SERIAL, t TEXT);
+INSERT INTO foo(t) VALUES ('One love');
+SELECT create_audit();
+                              create_audit                              
+------------------------------------------------------------------------
+ CREATE TABLE public.foo_audit (                                       +
+     id_old integer,                                                   +
+     id_new integer,                                                   +
+     t_old text,                                                       +
+     t_new text,                                                       +
+     stamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT current_timestamp,+
+     "current_user" TEXT NOT NULL DEFAULT current_user,                +
+     "session_user" TEXT NOT NULL DEFAULT session_user,                +
+     operation TEXT NOT NULL                                           +
+ );                                                                    +
+                                                                       +
+ CREATE OR REPLACE FUNCTION public.foo_audit()                         +
+ RETURNS TRIGGER                                                       +
+ LANGUAGE plpgsql                                                      +
+ AS $$                                                                 +
+ DECLARE                                                               +
+     v_old public.foo%ROWTYPE;                                         +
+     v_new public.foo%ROWTYPE;                                         +
+     v_ret public.foo%ROWTYPE;                                         +
+ BEGIN                                                                 +
+     IF (TG_OP = 'DELETE') THEN                                        +
+         v_old := OLD;                                                 +
+         v_new := NULL;                                                +
+         v_ret := OLD;                                                 +
+     ELSIF (TG_OP = 'INSERT') THEN                                     +
+         v_old := NULL;                                                +
+         v_new := NEW;                                                 +
+         v_ret := NEW;                                                 +
+     ELSIF (TG_OP = 'UPDATE') THEN                                     +
+         v_old := OLD;                                                 +
+         v_new := NEW;                                                 +
+         v_ret := NEW;                                                 +
+     END IF;                                                           +
+     INSERT INTO public.foo_audit (                                    +
+         id_old,                                                       +
+         t_old,                                                        +
+         id_new,                                                       +
+         t_new,                                                        +
+         operation                                                     +
+     )                                                                 +
+     VALUES((v_old).*, (v_new).*, TG_OP);                              +
+     RETURN v_ret;                                                     +
+ END;                                                                  +
+ $$;                                                                   +
+                                                                       +
+ CREATE TRIGGER public_foo_audit                                       +
+ AFTER INSERT OR UPDATE OR DELETE ON public.foo                        +
+     FOR EACH ROW EXECUTE PROCEDURE public.foo_audit();
+(1 row)
+
+ROLLBACK;

@@ -1,3 +1,8 @@
+CREATE OR REPLACE FUNCTION create_audit()
+RETURNS SETOF text
+IMMUTABLE STRICT
+LANGUAGE SQL
+AS $audit$
 WITH t0 AS (
     SELECT
         quote_ident(n.nspname) AS "schema",
@@ -118,7 +123,7 @@ UNION ALL
              * XXX In 9.4+, replace the hack below with
              * UNNEST(co.conkey) WITH ORDINALITY AS k(col, ord)
              */
-            (SELECT col, row_number() OVER () AS ord FROM UNNEST(co.conkey) AS u(col)) AS k /* XXX Need to find some pre-9.4 hack for this. */
+            (SELECT col, row_number() OVER () AS ord FROM UNNEST(co.conkey) AS u(col)) AS k
         JOIN
             pg_catalog.pg_attribute a
             ON (
@@ -140,6 +145,6 @@ UNION ALL
     CROSS JOIN
         (VALUES('old'),('new')) AS o_n(v)
 );
-
+$audit$;
 /* XXX Need to be able to handle adding columns.  Prolly a catalog
  * lookup.  Does 9.3 have DDL triggers we can use? */

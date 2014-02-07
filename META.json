@@ -1,0 +1,42 @@
+{
+    "name": "pg_audit",
+    "abstract": "Audit tables.",
+    "description": "Provides a history for a given table.",
+    "version": "0.1.0",
+    "maintainer": "David Fetter <david.fetter@disqus.com>",
+    "license": "BSD",
+
+    "provides": {
+        "pg_audit": {
+            "file": "sql/pg_audit--0.1.0.sql",
+            "docfile": "README.md",
+            "version": "0.1.0"
+        }
+    },
+
+    "prereqs": {
+        "runtime": {
+            "requires": {
+                "PostgreSQL": "9.3.0"
+            }
+        }
+    },
+
+    "release_status": "stable",
+
+    "resources": {
+        "repository": {
+            "url": "https://davidfetter@github.com/disqus/pg_audit.git",
+            "web": "http://github.com/disqus/pg_audit",
+            "type": "git"
+        }
+    },
+
+    "tags": ["audit", "history"],
+
+    "meta-spec": {
+        "version": "1.0.0",
+        "url": "http://pgxn.org/meta/spec.txt"
+    }
+}
+
