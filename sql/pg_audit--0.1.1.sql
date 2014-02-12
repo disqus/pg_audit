@@ -156,8 +156,7 @@ UNION ALL
     )
     SELECT
         format(
-            'CREATE INDEX %I ON %I.%I (%s);',
-            array_to_string(nspname || '_audit' || (relname || cols || v), '_'),
+            'CREATE INDEX ON %I.%I (%s);',
             nspname || '_audit',
             relname,
             (SELECT string_agg(u || '_' || v, ', ') FROM UNNEST(cols) AS u(u))
