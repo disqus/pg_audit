@@ -46,9 +46,6 @@ UNION ALL
     operation TEXT NOT NULL
 );
 
-INSERT INTO %I.%I
-SELECT * FROM %I.*%;
-
 CREATE OR REPLACE FUNCTION %I.%I()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -83,14 +80,16 @@ $$;
 
 CREATE TRIGGER %I
 AFTER INSERT OR UPDATE OR DELETE ON %I.%I
-    FOR EACH ROW EXECUTE PROCEDURE %I.%I();$q$,
+    FOR EACH ROW EXECUTE PROCEDURE %I.%I();
+
+INSERT INTO %I.%I
+SELECT * FROM %I.%I;
+$q$,
         "schema" || '_audit', "table",
         string_agg(
             quote_ident("column_name" || '_old') || ' ' || column_type || E',\n    ' ||
             quote_ident("column_name" || '_new') || ' ' || column_type,   E',\n    '
         ),
-        "schema" || '_audit', "table",
-        "schema" || '_audit', "table",
         "schema", "table",
         "schema", "table",
         "schema", "table",
@@ -100,8 +99,9 @@ AFTER INSERT OR UPDATE OR DELETE ON %I.%I
         string_agg(quote_ident("column_name" || '_new'), E',\n        '),
         quote_ident("schema" || '_' || "table" || '_audit'),
         "schema", "table",
-        "schema" || '_audit', "table"
-
+        "schema" || '_audit', "table",
+        "schema" || '_audit', "table",
+        "schema", "table"
         ) AS "table and trigger"
         FROM
             t0
