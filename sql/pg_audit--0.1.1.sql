@@ -82,15 +82,22 @@ CREATE TRIGGER %I
 AFTER INSERT OR UPDATE OR DELETE ON %I.%I
     FOR EACH ROW EXECUTE PROCEDURE %I.%I();
 
-INSERT INTO %I.%I
-SELECT * FROM %I.%I;
+INSERT INTO %I.%I (
+    %s,
+    operation
+)
+SELECT
+    %s,
+    'INSERT'
+FROM %I.%I;
+
 $q$,
         "schema" || '_audit', "table",
         string_agg(
             quote_ident("column_name" || '_old') || ' ' || column_type || E',\n    ' ||
             quote_ident("column_name" || '_new') || ' ' || column_type,   E',\n    '
         ),
-        "schema", "table",
+        "schema" || '_audit', "table",
         "schema", "table",
         "schema", "table",
         "schema", "table",
@@ -101,6 +108,8 @@ $q$,
         "schema", "table",
         "schema" || '_audit', "table",
         "schema" || '_audit', "table",
+        string_agg(quote_ident("column_name" || '_new'), E',\n    '),
+        string_agg(quote_ident("column_name"), E',\n    '),
         "schema", "table"
         ) AS "table and trigger"
         FROM
