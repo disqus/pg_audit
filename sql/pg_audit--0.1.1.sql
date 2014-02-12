@@ -46,6 +46,9 @@ UNION ALL
     operation TEXT NOT NULL
 );
 
+INSERT INTO %I.%I
+SELECT * FROM %I.*%;
+
 CREATE OR REPLACE FUNCTION %I.%I()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -87,6 +90,8 @@ AFTER INSERT OR UPDATE OR DELETE ON %I.%I
             quote_ident("column_name" || '_new') || ' ' || column_type,   E',\n    '
         ),
         "schema" || '_audit', "table",
+        "schema" || '_audit', "table",
+        "schema", "table",
         "schema", "table",
         "schema", "table",
         "schema", "table",
