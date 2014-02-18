@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION create_audit()
+CREATE OR REPLACE FUNCTION create_audit(enable_replica BOOLEAN)
 RETURNS SETOF text
 IMMUTABLE STRICT
 LANGUAGE SQL
@@ -81,7 +81,7 @@ $$;
 CREATE TRIGGER %I
 AFTER INSERT OR UPDATE OR DELETE ON %I.%I
     FOR EACH ROW EXECUTE PROCEDURE %I.%I();
-
+%s
 INSERT INTO %I.%I (
     %s,
     operation
@@ -107,6 +107,14 @@ $q$,
         quote_ident("schema" || '_' || "table" || '_audit'),
         "schema", "table",
         "schema" || '_audit', "table",
+        CASE
+        WHEN enable_replica THEN
+            format(
+                '%sALTER TABLE %I.%I ENABLE REPLICA TRIGGER %I;%s',
+                E'\n', "schema", "table", "schema" || '_' || "table" || '_audit', E'\n'
+            )
+        ELSE ''
+        END,
         "schema" || '_audit', "table",
         string_agg(quote_ident("column_name" || '_new'), E',\n    '),
         string_agg(quote_ident("column_name"), E',\n    '),
@@ -167,5 +175,13 @@ UNION ALL
         (VALUES('old'),('new')) AS o_n(v)
 );
 $audit$;
+
+CREATE OR REPLACE FUNCTION create_audit()
+RETURNS SETOF TEXT
+LANGUAGE SQL
+AS $$
+SELECT create_audit(false);
+$$;
+
 /* XXX Need to be able to handle adding columns.  Prolly a catalog
  * lookup.  Does 9.3 have DDL triggers we can use? */
