@@ -1,3 +1,7 @@
+NOTICE: Deprecated
+------------------
+This project is deprecated and no longer actively maintained by Disqus.
+
 Audit trails for PostgreSQL tables.  Run this script in your
 PostgreSQL database and use the output to create them.
 
